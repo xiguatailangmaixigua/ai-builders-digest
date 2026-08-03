@@ -1,9 +1,9 @@
 name: Generate Feeds
 
 on:
-  schedule:
-    # All feeds (tweets, podcasts, blogs): once daily at 6:17am UTC
-    - cron: '17 6 * * *'
+  # Live feeds are read from the upstream central repository in this personal
+  # archive. Keep self-hosted collection manual until its own API credentials
+  # and source registry are intentionally enabled.
   workflow_dispatch:
     inputs:
       mode:

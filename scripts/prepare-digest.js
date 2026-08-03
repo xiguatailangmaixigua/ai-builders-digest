@@ -20,17 +20,21 @@ import { readFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 
 // -- Constants ---------------------------------------------------------------
 
 const USER_DIR = join(homedir(), '.follow-builders');
 const CONFIG_PATH = join(USER_DIR, 'config.json');
+const FETCH_TIMEOUT_MS = 15000;
+const execFileAsync = promisify(execFile);
 
-const FEED_X_URL = 'https://raw.githubusercontent.com/xiguatailangmaixigua/ai-builders-digest/main/feed-x.json';
-const FEED_PODCASTS_URL = 'https://raw.githubusercontent.com/xiguatailangmaixigua/ai-builders-digest/main/feed-podcasts.json';
-const FEED_BLOGS_URL = 'https://raw.githubusercontent.com/xiguatailangmaixigua/ai-builders-digest/main/feed-blogs.json';
+const FEED_X_URL = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/feed-x.json';
+const FEED_PODCASTS_URL = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/feed-podcasts.json';
+const FEED_BLOGS_URL = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/feed-blogs.json';
 
-const PROMPTS_BASE = 'https://raw.githubusercontent.com/xiguatailangmaixigua/ai-builders-digest/main/prompts';
+const PROMPTS_BASE = 'https://raw.githubusercontent.com/zarazhangrui/follow-builders/main/prompts';
 const PROMPT_FILES = [
   'summarize-podcast.md',
   'summarize-tweets.md',
@@ -41,16 +45,37 @@ const PROMPT_FILES = [
 
 // -- Fetch helpers -----------------------------------------------------------
 
+async function fetchRemoteText(url) {
+  try {
+    const { stdout } = await execFileAsync(
+      'curl',
+      ['--fail', '--silent', '--show-error', '--location', '--max-time', String(FETCH_TIMEOUT_MS / 1000), url],
+      { maxBuffer: 20 * 1024 * 1024 }
+    );
+    return stdout;
+  } catch {
+    const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    if (!res.ok) return null;
+    return await res.text();
+  }
+}
+
 async function fetchJSON(url) {
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  return res.json();
+  try {
+    const body = await fetchRemoteText(url);
+    if (!body) return null;
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
 }
 
 async function fetchText(url) {
-  const res = await fetch(url);
-  if (!res.ok) return null;
-  return res.text();
+  try {
+    return await fetchRemoteText(url);
+  } catch {
+    return null;
+  }
 }
 
 // -- Main --------------------------------------------------------------------
@@ -73,11 +98,9 @@ async function main() {
   }
 
   // 2. Fetch all three feeds
-  const [feedX, feedPodcasts, feedBlogs] = await Promise.all([
-    fetchJSON(FEED_X_URL),
-    fetchJSON(FEED_PODCASTS_URL),
-    fetchJSON(FEED_BLOGS_URL)
-  ]);
+  const feedX = await fetchJSON(FEED_X_URL);
+  const feedPodcasts = await fetchJSON(FEED_PODCASTS_URL);
+  const feedBlogs = await fetchJSON(FEED_BLOGS_URL);
 
   if (!feedX) errors.push('Could not fetch tweet feed');
   if (!feedPodcasts) errors.push('Could not fetch podcast feed');
